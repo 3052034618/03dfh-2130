@@ -36,7 +36,7 @@ export class FeedbackService {
     return result
   }
 
-  create(data: Omit<Feedback, 'id' | 'createdAt' | 'status' | 'pageVersion'> & { pageVersion?: number }): Feedback {
+  async create(data: Omit<Feedback, 'id' | 'createdAt' | 'status' | 'pageVersion'> & { pageVersion?: number }): Promise<Feedback> {
     const page = this.db.pages.find((p) => p.id === data.pageId)
     const feedback: Feedback = {
       ...data,
@@ -46,16 +46,18 @@ export class FeedbackService {
       createdAt: new Date().toISOString(),
     }
     this.db.feedbacks = [...this.db.feedbacks, feedback]
+    await this.db.save()
     return feedback
   }
 
-  updateStatus(id: string, status: FeedbackStatus): Feedback | null {
+  async updateStatus(id: string, status: FeedbackStatus): Promise<Feedback | null> {
     const index = this.db.feedbacks.findIndex((f) => f.id === id)
     if (index === -1) return null
     const updated = { ...this.db.feedbacks[index], status }
     const list = [...this.db.feedbacks]
     list[index] = updated
     this.db.feedbacks = list
+    await this.db.save()
     return updated
   }
 
@@ -63,12 +65,13 @@ export class FeedbackService {
     return this.db.feedbacks.find((f) => f.id === id) ?? null
   }
 
-  delete(id: string): boolean {
+  async delete(id: string): Promise<boolean> {
     const index = this.db.feedbacks.findIndex((f) => f.id === id)
     if (index === -1) return false
     const list = [...this.db.feedbacks]
     list.splice(index, 1)
     this.db.feedbacks = list
+    await this.db.save()
     return true
   }
 }

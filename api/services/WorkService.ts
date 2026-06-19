@@ -29,14 +29,49 @@ export class WorkService {
     }))
   }
 
-  create(data: Omit<Work, 'id' | 'createdAt'>): Work {
+  async create(data: Omit<Work, 'id' | 'createdAt'>): Promise<Work> {
     const work: Work = {
       ...data,
       id: generateId(),
       createdAt: new Date().toISOString(),
     }
     this.db.works = [...this.db.works, work]
+    await this.db.save()
     return work
+  }
+
+  async createChapter(workId: string, title: string): Promise<Chapter> {
+    const chapter: Chapter = {
+      id: generateId(),
+      workId,
+      title,
+      createdAt: new Date().toISOString(),
+    }
+    this.db.chapters = [...this.db.chapters, chapter]
+    await this.db.save()
+    return chapter
+  }
+
+  async createPage(
+    chapterId: string,
+    imageUrl: string,
+    pageIndex: number,
+    width = 800,
+    height = 1200,
+  ): Promise<Page> {
+    const page: Page = {
+      id: generateId(),
+      chapterId,
+      imageUrl,
+      version: 1,
+      pageIndex,
+      width,
+      height,
+      createdAt: new Date().toISOString(),
+    }
+    this.db.pages = [...this.db.pages, page]
+    await this.db.save()
+    return page
   }
 
   getById(id: string): WorkDetail | null {

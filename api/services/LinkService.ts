@@ -19,12 +19,12 @@ export class LinkService {
     this.db = DbStore.getInstance()
   }
 
-  create(data: {
+  async create(data: {
     workId: string
     chapterId: string
     role: ReaderRole
     expiresAt?: string
-  }): ShareLink {
+  }): Promise<ShareLink> {
     const expiresAt =
       data.expiresAt ??
       new Date(Date.now() + DEFAULT_EXPIRES_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -39,6 +39,7 @@ export class LinkService {
       createdAt: new Date().toISOString(),
     }
     this.db.links = [...this.db.links, link]
+    await this.db.save()
     return link
   }
 

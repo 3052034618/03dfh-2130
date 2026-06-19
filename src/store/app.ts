@@ -21,6 +21,7 @@ interface AppState {
   fetchFeedbacks: (workId: string) => Promise<void>
   fetchLinks: (workId: string) => Promise<void>
   createWork: (data: Omit<Work, 'id' | 'createdAt'>) => Promise<Work>
+  createChapter: (workId: string, title: string, images: string[]) => Promise<void>
   createLink: (workId: string, data: { role: ReaderRole; chapterId: string; expiresAt?: string }) => Promise<ShareLink>
   updateFeedbackStatus: (id: string, status: FeedbackStatus) => Promise<void>
 }
@@ -101,6 +102,20 @@ export const useAppStore = create<AppState>((set) => ({
       const { data: work } = await res.json()
       set((state) => ({ works: [...state.works, work] }))
       return work
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  createChapter: async (workId: string, title: string, images: string[]) => {
+    set({ loading: true })
+    try {
+      await fetch(`/api/works/${workId}/chapters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, images }),
+      })
+      await useAppStore.getState().fetchWorkDetail(workId)
     } finally {
       set({ loading: false })
     }

@@ -12,7 +12,7 @@
       "width": 0.35,
       "height": 0.25
     },
-    "status": "pending",
+    "status": "resolved",
     "pageVersion": 1,
     "createdAt": "2026-06-19T22:09:11.824Z",
     "reviewerName": "林编辑"
@@ -142,5 +142,23 @@
     "pageVersion": 1,
     "createdAt": "2026-06-19T22:09:11.824Z",
     "reviewerName": "银河漫游者"
+  },
+  {
+    "pageId": "page-3",
+    "workId": "work-1",
+    "type": "cute",
+    "role": "fan",
+    "content": "??????????,???!",
+    "region": {
+      "y": 0.4,
+      "width": 0.3,
+      "height": 0.3,
+      "x": 0.2
+    },
+    "reviewerName": "????A",
+    "id": "mqli07w5w17rimib",
+    "status": "pending",
+    "pageVersion": 1,
+    "createdAt": "2026-06-19T22:26:23.861Z"
   }
 ]

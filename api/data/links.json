@@ -25,5 +25,14 @@
     "role": "fan",
     "expiresAt": "2026-07-19T22:09:11.827Z",
     "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "mqlhzpyjv7h73z67",
+    "workId": "work-1",
+    "chapterId": "chapter-1",
+    "role": "editor",
+    "token": "053370150d473d39884563e444f862fee3a0ff1fed00baba",
+    "expiresAt": "2026-06-26T22:26:00.618Z",
+    "createdAt": "2026-06-19T22:26:00.619Z"
   }
 ]

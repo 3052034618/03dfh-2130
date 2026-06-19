@@ -21,18 +21,20 @@ router.get('/:token', verifyToken, async (req: Request, res: Response): Promise<
 
     const pages = db.pages.filter((p) => p.chapterId === chapter.id)
     const feedbacks = db.feedbacks.filter((f) => {
-      if (link.role === 'fan') {
-        return f.workId === work.id && f.reviewerName === link.role
+      if (link.role === 'editor' || link.role === 'assistant') {
+        return f.workId === work.id
       }
-      return f.workId === work.id && f.role === link.role
+      return f.workId === work.id && f.role === 'fan'
     })
 
     res.status(200).json({
-      work,
-      chapter,
-      pages,
-      feedbacks,
-      role: link.role,
+      data: {
+        work,
+        chapter,
+        pages,
+        feedbacks,
+        role: link.role,
+      },
     })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
@@ -60,8 +62,8 @@ router.post('/:token/feedbacks', verifyToken, async (req: Request, res: Response
       reviewerName: body.reviewerName,
     }
 
-    const created = feedbackService.create(feedback)
-    res.status(201).json(created)
+    const created = await feedbackService.create(feedback)
+    res.status(201).json({ data: created })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }

@@ -162,11 +162,13 @@ export default function WorkDetail() {
     fetchFeedbacks,
     fetchLinks,
     createLink,
+    createChapter,
   } = useAppStore()
 
   const [activeTab, setActiveTab] = useState<TabKey>('chapters')
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [chapterTitle, setChapterTitle] = useState('')
 
   useEffect(() => {
@@ -206,17 +208,41 @@ export default function WorkDetail() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setSelectedFiles(Array.from(e.target.files))
+      const files = Array.from(e.target.files)
+      setSelectedFiles(files)
+      setPreviewUrls(files.map((f) => URL.createObjectURL(f)))
     }
   }
 
   const handleRemoveFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleUpload = () => {
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [previewUrls])
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleUpload = async () => {
+    if (!workId || !chapterTitle.trim() || selectedFiles.length === 0) return
+    const sortedFiles = [...selectedFiles].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const base64Images = await Promise.all(sortedFiles.map(fileToBase64))
+    await createChapter(workId, chapterTitle.trim(), base64Images)
     setUploadModalOpen(false)
+    previewUrls.forEach((url) => URL.revokeObjectURL(url))
     setSelectedFiles([])
+    setPreviewUrls([])
     setChapterTitle('')
   }
 
@@ -233,7 +259,7 @@ export default function WorkDetail() {
   }
 
   const buildShareUrl = (token: string) => {
-    return `${window.location.origin}/share/${token}`
+    return `${window.location.origin}/read/${token}`
   }
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -460,27 +486,53 @@ export default function WorkDetail() {
             </label>
 
             {selectedFiles.length > 0 && (
-              <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
-                {selectedFiles.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between px-3 py-2 bg-ink-800 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FileImage className="h-4 w-4 text-ink-500 shrink-0" />
-                      <span className="text-sm text-paper-100 truncate">{file.name}</span>
-                      <span className="text-xs text-ink-500 shrink-0">
-                        {(file.size / 1024).toFixed(1)} KB
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleRemoveFile(index)}
-                      className="text-ink-500 hover:text-paper-100 text-sm shrink-0 ml-2"
+              <div className="mt-3 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-4 gap-2">
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      key={index}
+                      className="relative group bg-ink-800 rounded-lg overflow-hidden"
                     >
-                      移除
-                    </button>
-                  </div>
-                ))}
+                      <img
+                        src={previewUrls[index]}
+                        alt={file.name}
+                        className="w-full aspect-square object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
+                        <span className="text-xs text-paper-100 truncate w-full text-center">{file.name}</span>
+                        <span className="text-xs text-ink-500">{(file.size / 1024).toFixed(1)} KB</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-paper-100 hover:bg-red-500 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      key={`list-${index}`}
+                      className="flex items-center justify-between px-3 py-2 bg-ink-800/50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileImage className="h-4 w-4 text-ink-500 shrink-0" />
+                        <span className="text-sm text-paper-100 truncate">{file.name}</span>
+                        <span className="text-xs text-ink-500 shrink-0">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="text-ink-500 hover:text-paper-100 text-sm shrink-0 ml-2"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

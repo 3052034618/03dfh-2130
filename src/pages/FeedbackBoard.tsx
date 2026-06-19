@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, SlidersHorizontal, Eye, GitCompare } from 'lucide-react'
 import type { Feedback, FeedbackType, FeedbackStatus, ReaderRole } from '@shared/types'
@@ -9,7 +9,7 @@ import RoleBadge from '@/components/RoleBadge'
 import StatusBadge from '@/components/StatusBadge'
 import Button from '@/components/Button'
 import Card from '@/components/Card'
-import { generateMockData } from '../../api/data/mockData'
+import { useAppStore } from '@/store/app'
 
 const FEEDBACK_TYPES: FeedbackType[] = ['confusing', 'slow', 'funny', 'cute', 'detail']
 const STATUSES: FeedbackStatus[] = ['pending', 'resolved', 'ignored']
@@ -18,14 +18,23 @@ const ROLES: ReaderRole[] = ['editor', 'assistant', 'fan']
 export default function FeedbackBoard() {
   const { workId } = useParams<{ workId: string }>()
   const navigate = useNavigate()
-  const mockData = useMemo(() => generateMockData(), [])
+  const {
+    currentWork,
+    pages,
+    feedbacks: allFeedbacks,
+    fetchWorkDetail,
+    fetchFeedbacks,
+    updateFeedbackStatus,
+  } = useAppStore()
 
-  const work = mockData.works.find((w) => w.id === workId) || mockData.works[0]
-  const pages = mockData.pages.filter((p) => {
-    const chapter = mockData.chapters.find((c) => c.id === p.chapterId)
-    return chapter?.workId === work.id
-  })
-  const allFeedbacks = mockData.feedbacks.filter((f) => f.workId === work.id)
+  useEffect(() => {
+    if (workId) {
+      fetchWorkDetail(workId)
+      fetchFeedbacks(workId)
+    }
+  }, [workId, fetchWorkDetail, fetchFeedbacks])
+
+  const work = currentWork
 
   const [selectedRole, setSelectedRole] = useState<ReaderRole | 'all'>('all')
   const [selectedTypes, setSelectedTypes] = useState<Set<FeedbackType>>(new Set(FEEDBACK_TYPES))
@@ -91,7 +100,9 @@ export default function FeedbackBoard() {
     }
   }
 
-  const handleStatusChange = (_feedbackId: string, _newStatus: FeedbackStatus) => {
+  const handleStatusChange = async (feedbackId: string, newStatus?: FeedbackStatus) => {
+    if (!newStatus) return
+    await updateFeedbackStatus(feedbackId, newStatus)
   }
 
   return (
@@ -317,7 +328,7 @@ export default function FeedbackBoard() {
                             <StatusBadge
                               status={feedback.status}
                               showDropdown
-                              onClick={() => handleStatusChange(feedback.id, feedback.status)}
+                              onClick={(newStatus) => handleStatusChange(feedback.id, newStatus)}
                             />
                           </div>
                         </div>

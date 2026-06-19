@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react'
 
 interface StatusBadgeProps {
   status: FeedbackStatus
-  onClick?: () => void
+  onClick?: (newStatus?: FeedbackStatus) => void
   showDropdown?: boolean
 }
 
@@ -57,7 +57,7 @@ export default function StatusBadge({ status, onClick, showDropdown = false }: S
               type="button"
               onClick={() => {
                 setOpen(false)
-                onClick?.()
+                onClick?.(s)
               }}
               className={cn(
                 'block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-ink-800',
