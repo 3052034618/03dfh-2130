@@ -2,15 +2,8 @@
   {
     "id": "work-1",
     "title": "星轨前夜",
-    "description": "在遥远的星际时代，少女艾拉与神秘旅行者的相遇，揭开了一段跨越光年的秘密。",
-    "coverUrl": "https://picsum.photos/seed/comic-cover/400/600",
-    "createdAt": "2026-06-19T22:09:11.824Z"
-  },
-  {
-    "title": "????2",
-    "description": "?????",
-    "coverUrl": "https://picsum.photos/seed/test2/400/600",
-    "id": "mqlhzpy053fkr227",
-    "createdAt": "2026-06-19T22:26:00.601Z"
+    "description": "一部关于星际冒险的科幻漫画",
+    "coverUrl": "https://picsum.photos/seed/xinggui/400/600",
+    "createdAt": "2026-06-19T22:45:38.283Z"
   }
 ]

@@ -1,11 +1,12 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, SlidersHorizontal, Eye, GitCompare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, GitCompare } from 'lucide-react'
 import type { Feedback, FeedbackType, Page as PageType } from '@shared/types'
-import { FEEDBACK_TYPE_META } from '@/utils/constants'
+import { FEEDBACK_TYPE_META, ROLE_META } from '@/utils/constants'
 import { cn } from '@/utils/helpers'
+import { useAppStore } from '@/store/app'
 import Button from '@/components/Button'
-import { generateMockData } from '../../api/data/mockData'
+import FeedbackBadge from '@/components/FeedbackBadge'
 
 const FEEDBACK_COLORS: Record<FeedbackType, string> = {
   confusing: '#2563eb',
@@ -20,52 +21,44 @@ export default function CompareView() {
   const [searchParams] = useSearchParams()
   const feedbackId = searchParams.get('feedbackId')
   const navigate = useNavigate()
-  const mockData = useMemo(() => generateMockData(), [])
 
-  const work = mockData.works.find((w) => w.id === workId) || mockData.works[0]
-  const chapters = mockData.chapters.filter((c) => c.workId === (work?.id || ''))
+  const {
+    currentWork,
+    chapters,
+    pages,
+    feedbacks,
+    fetchWorkDetail,
+    fetchFeedbacks,
+  } = useAppStore()
+
+  useEffect(() => {
+    if (workId) {
+      fetchWorkDetail(workId)
+      fetchFeedbacks(workId)
+    }
+  }, [workId, fetchWorkDetail, fetchFeedbacks])
+
+  const work = currentWork
   const currentChapter = chapters[0]
 
-  const allPages = mockData.pages.filter((p) => p.chapterId === currentChapter?.id)
+  const allPages = useMemo(() => {
+    return pages.filter((p) => p.chapterId === currentChapter?.id)
+  }, [pages, currentChapter])
+
   const currentIdx = Math.min(
-    Math.max(parseInt(pageIndex || '0', 10), 0),
-    allPages.length - 1
+    Math.max(Number(pageIndex) || 0, 0),
+    Math.max(allPages.length - 1, 0)
   )
   const currentPage = allPages[currentIdx]
 
-  const oldVersionPages = useMemo(() => {
-    return allPages.filter((p) => p.version === 1)
-  }, [allPages])
-
-  const newVersionPages = useMemo(() => {
-    const result: PageType[] = []
-    allPages.forEach((p) => {
-      if (p.version === 1) {
-        result.push({
-          ...p,
-          id: `${p.id}-v2`,
-          version: 2,
-          imageUrl: p.imageUrl.replace(/seed\/comic(\d+)/, 'seed/comic$1-v2'),
-          createdAt: new Date(Date.now() + 86400000).toISOString(),
-        })
-      }
-    })
-    return result
-  }, [allPages])
-
-  const oldPage = oldVersionPages[currentIdx]
-  const newPage = newVersionPages[currentIdx]
-  const hasNewVersion = newVersionPages.length > 0
-
   const pageFeedbacks = useMemo(() => {
-    return mockData.feedbacks.filter(
-      (f) => f.pageId === currentPage?.id || f.pageId === oldPage?.id
-    )
-  }, [mockData.feedbacks, currentPage, oldPage])
+    return feedbacks.filter((f) => f.pageId === currentPage?.id)
+  }, [feedbacks, currentPage])
 
   const [leftFlex, setLeftFlex] = useState(1)
   const containerRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
+  const [hoveredFeedbackId, setHoveredFeedbackId] = useState<string | null>(null)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -153,7 +146,7 @@ export default function CompareView() {
               size="sm"
               onClick={() => navigate(`/work/${workId}/feedback`)}
             >
-              <SlidersHorizontal className="h-4 w-4 mr-1.5" />
+              <Eye className="h-4 w-4 mr-1.5" />
               看板
             </Button>
             <Button variant="primary" size="sm">
@@ -183,10 +176,10 @@ export default function CompareView() {
           </div>
           <div className="flex-1 overflow-auto bg-ink-950 p-8">
             <div className="relative mx-auto max-w-[500px]">
-              {oldPage ? (
+              {currentPage ? (
                 <>
                   <img
-                    src={oldPage.imageUrl}
+                    src={currentPage.imageUrl}
                     alt="旧版本"
                     className="w-full rounded-lg shadow-2xl"
                     draggable={false}
@@ -194,44 +187,83 @@ export default function CompareView() {
                   {pageFeedbacks.map((fb) => {
                     const color = FEEDBACK_COLORS[fb.type]
                     const isHighlighted = fb.id === feedbackId
+                    const isHovered = hoveredFeedbackId === fb.id
+                    const centerX = fb.region.x + fb.region.width / 2
+                    const centerY = fb.region.y + fb.region.height / 2
+
                     return (
-                      <div
-                        key={fb.id}
-                        className={cn(
-                          'absolute transition-all duration-300',
-                          isHighlighted && 'z-10'
-                        )}
-                        style={{
-                          left: `${fb.region.x * 100}%`,
-                          top: `${fb.region.y * 100}%`,
-                          width: `${fb.region.width * 100}%`,
-                          height: `${fb.region.height * 100}%`,
-                        }}
-                      >
+                      <div key={fb.id}>
                         <div
                           className={cn(
-                            'h-full w-full rounded-sm border-2',
-                            isHighlighted ? 'animate-pulse-ring' : ''
+                            'absolute transition-all duration-300',
+                            isHighlighted && 'z-10'
                           )}
                           style={{
-                            borderColor: color,
-                            backgroundColor: `${color}22`,
+                            left: `${fb.region.x * 100}%`,
+                            top: `${fb.region.y * 100}%`,
+                            width: `${fb.region.width * 100}%`,
+                            height: `${fb.region.height * 100}%`,
                           }}
-                        />
-                        <div
-                          className="absolute -top-2 -left-2 flex h-6 w-6 items-center justify-center rounded-full text-xs text-white shadow-lg"
-                          style={{ backgroundColor: color }}
-                          title={`${FEEDBACK_TYPE_META[fb.type].label} - ${fb.reviewerName}`}
                         >
-                          {FEEDBACK_TYPE_META[fb.type].emoji}
+                          <div
+                            className={cn(
+                              'h-full w-full rounded-sm border-2',
+                              isHighlighted ? 'animate-pulse-ring' : ''
+                            )}
+                            style={{
+                              borderColor: color,
+                              backgroundColor: `${color}22`,
+                            }}
+                          />
                         </div>
+                        <div
+                          className={cn(
+                            'absolute z-10 cursor-pointer transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-150',
+                            isHovered && 'scale-125'
+                          )}
+                          style={{ left: `${centerX * 100}%`, top: `${centerY * 100}%` }}
+                          onMouseEnter={() => setHoveredFeedbackId(fb.id)}
+                          onMouseLeave={() => setHoveredFeedbackId(null)}
+                        >
+                          <div className="relative">
+                            <span
+                              className={cn(
+                                'absolute inset-0 rounded-full animate-pulse-ring opacity-60'
+                              )}
+                              style={{ backgroundColor: color }}
+                            />
+                            <span
+                              className="relative block w-5 h-5 rounded-full ring-2 ring-white/80 shadow-lg"
+                              style={{ backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                        {isHovered && (
+                          <div
+                            className="absolute z-20 min-w-64 max-w-xs p-3 rounded-lg shadow-xl bg-ink-900 border border-ink-700 animate-fade-up pointer-events-none"
+                            style={{
+                              left: `${centerX * 100}%`,
+                              top: `${centerY * 100}%`,
+                              transform: 'translate(-50%, -120%)',
+                            }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <FeedbackBadge type={fb.type} size="sm" />
+                              <span className="text-xs text-ink-400">
+                                {ROLE_META[fb.role].label}
+                              </span>
+                            </div>
+                            <p className="text-sm text-paper-100 line-clamp-2">{fb.content}</p>
+                            <p className="mt-1 text-xs text-ink-500">— {fb.reviewerName}</p>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
                 </>
               ) : (
                 <div className="flex items-center justify-center py-24 text-paper-200">
-                  暂无旧版本页面
+                  暂无页面
                 </div>
               )}
             </div>
@@ -261,56 +293,88 @@ export default function CompareView() {
                 新
               </span>
               <span className="text-sm font-medium">新版本 v2</span>
-              {!hasNewVersion && (
-                <span className="text-xs text-ink-500">(预览版)</span>
-              )}
+              <span className="text-xs text-ink-500">(预览版)</span>
             </div>
             <span className="text-xs text-ink-500">显示原反馈位置映射</span>
           </div>
           <div className="flex-1 overflow-auto bg-ink-950 p-8">
             <div className="relative mx-auto max-w-[500px]">
-              {newPage ? (
+              {currentPage ? (
                 <>
-                  <img
-                    src={newPage.imageUrl}
-                    alt="新版本"
-                    className="w-full rounded-lg shadow-2xl"
-                    draggable={false}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = oldPage?.imageUrl || ''
-                    }}
-                  />
+                  <div className="relative">
+                    <img
+                      src={currentPage.imageUrl}
+                      alt="新版本"
+                      className="w-full rounded-lg shadow-2xl"
+                      draggable={false}
+                    />
+                    <div className="absolute top-2 right-2 bg-green-500/90 text-white text-xs px-2 py-1 rounded font-medium">
+                      新版
+                    </div>
+                  </div>
                   {pageFeedbacks.map((fb) => {
                     const color = FEEDBACK_COLORS[fb.type]
                     const isHighlighted = fb.id === feedbackId
+                    const isHovered = hoveredFeedbackId === fb.id
+                    const centerX = fb.region.x + fb.region.width / 2
+                    const centerY = fb.region.y + fb.region.height / 2
+
                     return (
-                      <div
-                        key={fb.id}
-                        className={cn(
-                          'absolute transition-all duration-300',
-                          isHighlighted && 'z-10'
-                        )}
-                        style={{
-                          left: `${fb.region.x * 100}%`,
-                          top: `${fb.region.y * 100}%`,
-                          width: `${fb.region.width * 100}%`,
-                          height: `${fb.region.height * 100}%`,
-                        }}
-                      >
+                      <div key={fb.id}>
                         <div
-                          className="h-full w-full rounded-sm border-2 border-dashed"
+                          className={cn(
+                            'absolute transition-all duration-300',
+                            isHighlighted && 'z-10'
+                          )}
                           style={{
-                            borderColor: color,
-                            backgroundColor: 'transparent',
+                            left: `${fb.region.x * 100}%`,
+                            top: `${fb.region.y * 100}%`,
+                            width: `${fb.region.width * 100}%`,
+                            height: `${fb.region.height * 100}%`,
                           }}
-                        />
-                        <div
-                          className="absolute -top-2 -left-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-white shadow-lg whitespace-nowrap"
-                          style={{ backgroundColor: color }}
                         >
-                          <span>{FEEDBACK_TYPE_META[fb.type].emoji}</span>
-                          <span>原反馈位置</span>
+                          <div
+                            className="h-full w-full rounded-sm border-2 border-dashed"
+                            style={{
+                              borderColor: color,
+                              backgroundColor: 'transparent',
+                              opacity: 0.6,
+                            }}
+                          />
                         </div>
+                        <div
+                          className={cn(
+                            'absolute z-10 cursor-pointer transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-150',
+                            isHovered && 'scale-125'
+                          )}
+                          style={{ left: `${centerX * 100}%`, top: `${centerY * 100}%` }}
+                          onMouseEnter={() => setHoveredFeedbackId(fb.id)}
+                          onMouseLeave={() => setHoveredFeedbackId(null)}
+                        >
+                          <div className="relative">
+                            <span
+                              className="relative block w-5 h-5 rounded-full ring-2 ring-white/50 shadow-lg opacity-60"
+                              style={{ backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                        {isHovered && (
+                          <div
+                            className="absolute z-20 min-w-64 max-w-xs p-3 rounded-lg shadow-xl bg-ink-900/80 border border-ink-700/60 animate-fade-up pointer-events-none backdrop-blur-sm"
+                            style={{
+                              left: `${centerX * 100}%`,
+                              top: `${centerY * 100}%`,
+                              transform: 'translate(-50%, -120%)',
+                            }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <FeedbackBadge type={fb.type} size="sm" />
+                              <span className="text-xs text-ink-400">原反馈位置</span>
+                            </div>
+                            <p className="text-sm text-paper-100/80 line-clamp-2">{fb.content}</p>
+                            <p className="mt-1 text-xs text-ink-500">— {fb.reviewerName}</p>
+                          </div>
+                        )}
                       </div>
                     )
                   })}

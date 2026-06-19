@@ -1,85 +1,80 @@
-import fs from 'node:fs/promises';
-import { resolve } from 'node:path';
-import type { Work, Chapter, Page, Feedback, ShareLink } from '../../shared/types';
-import { generateMockData } from './mockData';
+import type { Work, Chapter, Page, Feedback, ShareLink } from '../../shared/types'
+import { generateMockData } from './mockData.js'
+import { mkdir, readFile, writeFile } from 'fs/promises'
+import { resolve } from 'path'
 
 export class DbStore {
-  private static instance: DbStore | null = null;
+  private static instance: DbStore | null = null
 
-  works: Work[] = [];
-  chapters: Chapter[] = [];
-  pages: Page[] = [];
-  feedbacks: Feedback[] = [];
-  links: ShareLink[] = [];
+  public works: Work[] = []
+  public chapters: Chapter[] = []
+  public pages: Page[] = []
+  public feedbacks: Feedback[] = []
+  public links: ShareLink[] = []
 
-  private constructor() {}
+  private dataDir = resolve(process.cwd(), 'api/data')
+
+  private getPath(name: string): string {
+    return resolve(this.dataDir, `${name}.json`)
+  }
+
+  private async readFile(name: string): Promise<any[]> {
+    try {
+      const content = await readFile(this.getPath(name), 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      return []
+    }
+  }
 
   static getInstance(): DbStore {
     if (!DbStore.instance) {
-      DbStore.instance = new DbStore();
+      DbStore.instance = new DbStore()
     }
-    return DbStore.instance;
-  }
-
-  private getDataPath(filename: string): string {
-    return resolve(process.cwd(), 'api/data', filename);
-  }
-
-  private async readFile<T>(filename: string): Promise<T[]> {
-    const filePath = this.getDataPath(filename);
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content) as T[];
-    } catch {
-      return [];
-    }
-  }
-
-  private async writeFile<T>(filename: string, data: T[]): Promise<void> {
-    const filePath = this.getDataPath(filename);
-    await fs.mkdir(resolve(process.cwd(), 'api/data'), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    return DbStore.instance
   }
 
   async load(): Promise<void> {
     const [works, chapters, pages, feedbacks, links] = await Promise.all([
-      this.readFile<Work>('works.json'),
-      this.readFile<Chapter>('chapters.json'),
-      this.readFile<Page>('pages.json'),
-      this.readFile<Feedback>('feedbacks.json'),
-      this.readFile<ShareLink>('links.json'),
-    ]);
+      this.readFile('works'),
+      this.readFile('chapters'),
+      this.readFile('pages'),
+      this.readFile('feedbacks'),
+      this.readFile('links'),
+    ])
 
-    if (
+    const allEmpty =
       works.length === 0 &&
       chapters.length === 0 &&
       pages.length === 0 &&
       feedbacks.length === 0 &&
       links.length === 0
-    ) {
-      const mockData = generateMockData();
-      this.works = mockData.works;
-      this.chapters = mockData.chapters;
-      this.pages = mockData.pages;
-      this.feedbacks = mockData.feedbacks;
-      this.links = mockData.links;
-      await this.save();
+
+    if (allEmpty) {
+      const mockData = generateMockData()
+      this.works = mockData.works
+      this.chapters = mockData.chapters
+      this.pages = mockData.pages
+      this.feedbacks = mockData.feedbacks
+      this.links = mockData.links
+      await this.save()
     } else {
-      this.works = works;
-      this.chapters = chapters;
-      this.pages = pages;
-      this.feedbacks = feedbacks;
-      this.links = links;
+      this.works = works as Work[]
+      this.chapters = chapters as Chapter[]
+      this.pages = pages as Page[]
+      this.feedbacks = feedbacks as Feedback[]
+      this.links = links as ShareLink[]
     }
   }
 
   async save(): Promise<void> {
+    await mkdir(this.dataDir, { recursive: true })
     await Promise.all([
-      this.writeFile('works.json', this.works),
-      this.writeFile('chapters.json', this.chapters),
-      this.writeFile('pages.json', this.pages),
-      this.writeFile('feedbacks.json', this.feedbacks),
-      this.writeFile('links.json', this.links),
-    ]);
+      writeFile(this.getPath('works'), JSON.stringify(this.works, null, 2), 'utf-8'),
+      writeFile(this.getPath('chapters'), JSON.stringify(this.chapters, null, 2), 'utf-8'),
+      writeFile(this.getPath('pages'), JSON.stringify(this.pages, null, 2), 'utf-8'),
+      writeFile(this.getPath('feedbacks'), JSON.stringify(this.feedbacks, null, 2), 'utf-8'),
+      writeFile(this.getPath('links'), JSON.stringify(this.links, null, 2), 'utf-8'),
+    ])
   }
 }

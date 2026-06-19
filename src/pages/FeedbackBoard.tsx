@@ -57,13 +57,13 @@ export default function FeedbackBoard() {
       cute: 0,
       detail: 0,
     }
-    allFeedbacks.forEach((fb) => {
+    filteredFeedbacks.forEach((fb) => {
       stats[fb.type]++
     })
     return stats
-  }, [allFeedbacks])
+  }, [filteredFeedbacks])
 
-  const totalFeedbacks = allFeedbacks.length
+  const totalFeedbacks = filteredFeedbacks.length
 
   const toggleType = (type: FeedbackType) => {
     setSelectedTypes((prev) => {

@@ -180,10 +180,15 @@ export default function WorkDetail() {
   }, [workId, fetchWorkDetail, fetchFeedbacks, fetchLinks])
 
   const chaptersWithPageCount = useMemo(() => {
-    return chapters.map((chapter) => ({
-      ...chapter,
-      pageCount: pages.filter((p) => p.chapterId === chapter.id).length,
-    }))
+    return chapters.map((chapter) => {
+      const chapterPages = pages.filter((p) => p.chapterId === chapter.id)
+      const firstPage = chapterPages.sort((a, b) => a.pageIndex - b.pageIndex)[0]
+      return {
+        ...chapter,
+        pageCount: chapterPages.length,
+        firstPageImageUrl: firstPage?.imageUrl,
+      }
+    })
   }, [chapters, pages])
 
   const feedbackStats = useMemo(() => {
@@ -392,8 +397,18 @@ export default function WorkDetail() {
                     className="flex items-center justify-between cursor-pointer"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-lg bg-ink-800 flex items-center justify-center">
-                        <FileImage className="h-6 w-6 text-ink-500" />
+                      <div className="w-12 h-16 rounded-lg bg-ink-800 overflow-hidden border border-ink-700 flex-shrink-0">
+                        {chapter.firstPageImageUrl ? (
+                          <img
+                            src={chapter.firstPageImageUrl}
+                            alt={chapter.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileImage className="h-5 w-5 text-ink-500" />
+                          </div>
+                        )}
                       </div>
                       <div>
                         <h3 className="font-medium text-paper-100">{chapter.title}</h3>
