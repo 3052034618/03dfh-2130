@@ -24,6 +24,7 @@ interface AppState {
   createChapter: (workId: string, title: string, images: (string | { imageUrl: string; width?: number; height?: number })[]) => Promise<void>
   createLink: (workId: string, data: { role: ReaderRole; chapterId: string; expiresAt?: string }) => Promise<ShareLink>
   updateFeedbackStatus: (id: string, status: FeedbackStatus) => Promise<void>
+  updateFeedbacksBatch: (ids: string[], status: FeedbackStatus) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -154,6 +155,20 @@ export const useAppStore = create<AppState>((set) => ({
       set((state) => ({
         feedbacks: state.feedbacks.map((f) => (f.id === id ? updated : f)),
       }))
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  updateFeedbacksBatch: async (ids: string[], status: FeedbackStatus) => {
+    set({ loading: true })
+    try {
+      await fetch('/api/feedbacks/batch-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, status }),
+      })
+      await useAppStore.getState().fetchFeedbacks(useAppStore.getState().currentWork?.id || '')
     } finally {
       set({ loading: false })
     }

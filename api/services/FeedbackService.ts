@@ -61,6 +61,22 @@ export class FeedbackService {
     return updated
   }
 
+  async batchUpdateStatus(ids: string[], status: FeedbackStatus): Promise<Feedback[]> {
+    const list = [...this.db.feedbacks]
+    const updatedList: Feedback[] = []
+    ids.forEach((id) => {
+      const index = list.findIndex((f) => f.id === id)
+      if (index !== -1) {
+        const updated = { ...list[index], status }
+        list[index] = updated
+        updatedList.push(updated)
+      }
+    })
+    this.db.feedbacks = list
+    await this.db.save()
+    return updatedList
+  }
+
   getById(id: string): Feedback | null {
     return this.db.feedbacks.find((f) => f.id === id) ?? null
   }

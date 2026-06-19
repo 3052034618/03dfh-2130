@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { Chapter, Page, Feedback, FeedbackType, ReaderRole, Region } from '@shared/types'
+import type { Chapter, Page, Feedback, FeedbackType, ReaderRole, Region, Work } from '@shared/types'
 
 interface ReaderState {
   token: string | null
   role: ReaderRole | null
+  work: Work | null
   chapter: Chapter | null
   pages: Page[]
   feedbacks: Feedback[]
@@ -14,6 +15,7 @@ interface ReaderState {
   zoom: number
   setToken: (token: string | null) => void
   setRole: (role: ReaderRole | null) => void
+  setWork: (work: Work | null) => void
   setChapter: (chapter: Chapter | null) => void
   setPages: (pages: Page[]) => void
   setFeedbacks: (feedbacks: Feedback[]) => void
@@ -35,6 +37,7 @@ interface ReaderState {
 export const useReaderStore = create<ReaderState>((set) => ({
   token: null,
   role: null,
+  work: null,
   chapter: null,
   pages: [],
   feedbacks: [],
@@ -46,6 +49,7 @@ export const useReaderStore = create<ReaderState>((set) => ({
 
   setToken: (token) => set({ token }),
   setRole: (role) => set({ role }),
+  setWork: (work) => set({ work }),
   setChapter: (chapter) => set({ chapter }),
   setPages: (pages) => set({ pages }),
   setFeedbacks: (feedbacks) => set({ feedbacks }),
@@ -61,6 +65,7 @@ export const useReaderStore = create<ReaderState>((set) => ({
     set({
       token,
       role: data.role,
+      work: data.work,
       chapter: data.chapter,
       pages: data.pages,
       feedbacks: data.feedbacks,

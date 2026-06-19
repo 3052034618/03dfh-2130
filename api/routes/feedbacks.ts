@@ -20,4 +20,23 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
+router.post('/batch-update', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const body = req.body as { ids: string[]; status: FeedbackStatus }
+    const { ids, status } = body
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'Invalid ids' })
+      return
+    }
+    if (!status) {
+      res.status(400).json({ error: 'Status is required' })
+      return
+    }
+    const updated = await feedbackService.batchUpdateStatus(ids, status)
+    res.status(200).json({ data: updated })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 export default router

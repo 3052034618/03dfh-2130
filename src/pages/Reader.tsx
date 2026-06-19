@@ -72,6 +72,7 @@ export default function Reader() {
     setSelectedRegion,
     submitFeedback,
     role,
+    work,
     chapter,
     expandedFeedbackId,
     setExpandedFeedbackId,
@@ -111,10 +112,10 @@ export default function Reader() {
   }, [token, fetchShareData, setActiveFeedbackType, setSelectedRegion, setExpandedFeedbackId])
 
   useEffect(() => {
-    if (chapter) {
-      setWorkTitle('星轨前夜')
+    if (work) {
+      setWorkTitle(work.title)
     }
-  }, [chapter])
+  }, [work])
 
   useEffect(() => {
     const observer = new IntersectionObserver(

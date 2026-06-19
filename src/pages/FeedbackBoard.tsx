@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, SlidersHorizontal, Eye, GitCompare, Download, LayoutGrid, List, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronLeft, SlidersHorizontal, Eye, GitCompare, Download, LayoutGrid, List, ChevronDown, ChevronUp, ChevronRight, CheckCircle2, XCircle, CheckSquare, Square, MoreHorizontal } from 'lucide-react'
 import type { Feedback, FeedbackType, FeedbackStatus, ReaderRole } from '@shared/types'
 import { FEEDBACK_TYPE_META, ROLE_META, STATUS_META } from '@/utils/constants'
 import { cn, formatDate } from '@/utils/helpers'
@@ -15,6 +15,22 @@ const FEEDBACK_TYPES: FeedbackType[] = ['confusing', 'slow', 'funny', 'cute', 'd
 const STATUSES: FeedbackStatus[] = ['pending', 'resolved', 'ignored']
 const ROLES: ReaderRole[] = ['editor', 'assistant', 'fan']
 
+const FEEDBACK_RING_COLORS: Record<FeedbackType, string> = {
+  confusing: '#f59e0b',
+  slow: '#3b82f6',
+  funny: '#f97316',
+  cute: '#ec4899',
+  detail: '#8b5cf6',
+}
+
+const FEEDBACK_BG_COLORS: Record<FeedbackType, string> = {
+  confusing: 'rgba(245, 158, 11, 0.1)',
+  slow: 'rgba(59, 130, 246, 0.1)',
+  funny: 'rgba(249, 115, 22, 0.1)',
+  cute: 'rgba(236, 72, 153, 0.1)',
+  detail: 'rgba(139, 92, 246, 0.1)',
+}
+
 export default function FeedbackBoard() {
   const { workId } = useParams<{ workId: string }>()
   const navigate = useNavigate()
@@ -26,6 +42,7 @@ export default function FeedbackBoard() {
     fetchWorkDetail,
     fetchFeedbacks,
     updateFeedbackStatus,
+    updateFeedbacksBatch,
   } = useAppStore()
 
   useEffect(() => {
@@ -42,6 +59,11 @@ export default function FeedbackBoard() {
   const [selectedStatuses, setSelectedStatuses] = useState<Set<FeedbackStatus>>(new Set(STATUSES))
   const [viewMode, setViewMode] = useState<'list' | 'aggregate'>('list')
   const [expandedPageId, setExpandedPageId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null)
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+  const exportDropdownRef = useRef<HTMLDivElement>(null)
+  const [highlightedFeedbackId, setHighlightedFeedbackId] = useState<string | null>(null)
 
   const filteredFeedbacks = useMemo(() => {
     return allFeedbacks.filter((fb) => {
@@ -108,6 +130,48 @@ export default function FeedbackBoard() {
     await updateFeedbackStatus(feedbackId, newStatus)
   }
 
+  const toggleSelectFeedback = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const selectAllFiltered = () => {
+    const ids = filteredFeedbacks.map((fb) => fb.id)
+    setSelectedIds(new Set(ids))
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+  }
+
+  const handleBatchUpdate = async (status: FeedbackStatus) => {
+    if (selectedIds.size === 0) return
+    const ids = Array.from(selectedIds)
+    await updateFeedbacksBatch(ids, status)
+    clearSelection()
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setExportDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const toggleChapter = (chapterId: string) => {
+    setExpandedChapterId((prev) => (prev === chapterId ? null : chapterId))
+  }
+
   const chapterPageGroups = useMemo(() => {
     const pageFeedbackMap = new Map<string, Feedback[]>()
     filteredFeedbacks.forEach((fb) => {
@@ -128,19 +192,61 @@ export default function FeedbackBoard() {
     })
   }, [chapters, pages, filteredFeedbacks])
 
-  const exportCSV = () => {
+  const getFeedbacksForExport = (scope: 'all' | 'chapter' | 'page'): Feedback[] => {
+    if (scope === 'all') {
+      return filteredFeedbacks
+    }
+    if (scope === 'chapter' && expandedChapterId) {
+      return filteredFeedbacks.filter((fb) => {
+        const p = pages.find((p) => p.id === fb.pageId)
+        return p?.chapterId === expandedChapterId
+      })
+    }
+    if (scope === 'page' && expandedPageId) {
+      return filteredFeedbacks.filter((fb) => fb.pageId === expandedPageId)
+    }
+    return filteredFeedbacks
+  }
+
+  const getExportFileName = (scope: 'all' | 'chapter' | 'page'): string => {
+    const base = `反馈导出_${work?.title || '未知'}`
+    const date = new Date().toISOString().slice(0, 10)
+    if (scope === 'chapter' && expandedChapterId) {
+      const chapter = chapters.find((c) => c.id === expandedChapterId)
+      if (chapter) {
+        return `${base}_${chapter.title}_${date}.csv`
+      }
+    }
+    if (scope === 'page' && expandedPageId) {
+      const page = pages.find((p) => p.id === expandedPageId)
+      if (page) {
+        const chapter = chapters.find((c) => c.id === page.chapterId)
+        const chapterPart = chapter ? `${chapter.title}_` : ''
+        return `${base}_${chapterPart}P${page.pageIndex + 1}_${date}.csv`
+      }
+    }
+    return `${base}_${date}.csv`
+  }
+
+  const exportCSV = (scope: 'all' | 'chapter' | 'page' = 'all') => {
+    const feedbacksToExport = getFeedbacksForExport(scope)
+    if (feedbacksToExport.length === 0) return
+
     const BOM = '\uFEFF'
-    const header = '序号,反馈类型,反馈内容,评论者,角色,状态,页码,区域(x,y,w,h),提交时间'
-    const rows = filteredFeedbacks.map((fb, i) => {
-      const page = pages.find(p => p.id === fb.pageId)
+    const header = '序号,作品名,章节名,页码,反馈类型,反馈内容,评论者,角色,状态,区域(x,y,w,h),提交时间'
+    const rows = feedbacksToExport.map((fb, i) => {
+      const page = pages.find((p) => p.id === fb.pageId)
+      const chapter = page ? chapters.find((c) => c.id === page.chapterId) : undefined
       return [
         i + 1,
+        work?.title || '',
+        chapter?.title || '',
+        page ? `P${page.pageIndex + 1}` : '',
         FEEDBACK_TYPE_META[fb.type].label,
         `"${fb.content.replace(/"/g, '""')}"`,
         fb.reviewerName,
         ROLE_META[fb.role].label,
         STATUS_META[fb.status].label,
-        page ? `P${page.pageIndex + 1}` : '',
         `(${fb.region.x},${fb.region.y},${fb.region.width},${fb.region.height})`,
         formatDate(fb.createdAt),
       ].join(',')
@@ -150,9 +256,10 @@ export default function FeedbackBoard() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `反馈导出_${work?.title || '未知'}_${new Date().toISOString().slice(0,10)}.csv`
+    a.download = getExportFileName(scope)
     a.click()
     URL.revokeObjectURL(url)
+    setExportDropdownOpen(false)
   }
 
   const getCountColor = (count: number) => {
@@ -314,6 +421,46 @@ export default function FeedbackBoard() {
             <p className="text-sm text-paper-200">反馈看板 · 共 {filteredFeedbacks.length} 条反馈</p>
           </div>
           <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 mr-2 px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/30">
+                <span className="text-sm text-accent font-medium">已选 {selectedIds.size} 条</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleBatchUpdate('resolved')}
+                  className="!py-1 !px-2 text-xs"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                  标记已解决
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleBatchUpdate('ignored')}
+                  className="!py-1 !px-2 text-xs"
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                  标记忽略
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllFiltered}
+                  className="!py-1 !px-2 text-xs"
+                >
+                  <CheckSquare className="h-3.5 w-3.5 mr-1" />
+                  全选当前筛选
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSelection}
+                  className="!py-1 !px-2 text-xs"
+                >
+                  清空选择
+                </Button>
+              </div>
+            )}
             <div className="flex items-center rounded-lg border border-ink-700 overflow-hidden">
               <button
                 onClick={() => setViewMode('list')}
@@ -336,10 +483,52 @@ export default function FeedbackBoard() {
                 聚合
               </button>
             </div>
-            <Button variant="secondary" size="sm" onClick={exportCSV}>
-              <Download className="h-4 w-4 mr-1.5" />
-              导出 CSV
-            </Button>
+            <div className="relative" ref={exportDropdownRef}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+              >
+                <Download className="h-4 w-4 mr-1.5" />
+                导出 CSV
+                <ChevronDown className="h-3.5 w-3.5 ml-1.5" />
+              </Button>
+              {exportDropdownOpen && (
+                <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-ink-700 bg-ink-900 shadow-lg z-50 overflow-hidden">
+                  <button
+                    onClick={() => exportCSV('all')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-ink-800 transition-colors flex items-center gap-2"
+                  >
+                    <Download className="h-3.5 w-3.5 text-paper-200" />
+                    导出全部（当前筛选）
+                  </button>
+                  <button
+                    onClick={() => viewMode === 'aggregate' && expandedChapterId && exportCSV('chapter')}
+                    disabled={!(viewMode === 'aggregate' && expandedChapterId)}
+                    className={cn(
+                      'w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2',
+                      viewMode === 'aggregate' && expandedChapterId
+                        ? 'hover:bg-ink-800'
+                        : 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Download className="h-3.5 w-3.5 text-paper-200" />
+                    导出当前章节
+                  </button>
+                  <button
+                    onClick={() => expandedPageId && exportCSV('page')}
+                    disabled={!expandedPageId}
+                    className={cn(
+                      'w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2',
+                      expandedPageId ? 'hover:bg-ink-800' : 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Download className="h-3.5 w-3.5 text-paper-200" />
+                    导出当前页面
+                  </button>
+                </div>
+              )}
+            </div>
             <Button variant="secondary" size="sm" onClick={() => navigate(-1)}>
               <Eye className="h-4 w-4 mr-1.5" />
               浏览阅读
@@ -365,15 +554,31 @@ export default function FeedbackBoard() {
             <div className="flex flex-col gap-3">
               {filteredFeedbacks.map((feedback) => {
                 const page = getPageForFeedback(feedback)
+                const isSelected = selectedIds.has(feedback.id)
                 return (
                   <Card
                     key={feedback.id}
                     hover
-                    className="cursor-pointer"
+                    className={cn('cursor-pointer', isSelected && 'ring-2 ring-accent')}
                     onClick={() => handleFeedbackClick(feedback)}
                   >
                     <div className="flex gap-4">
                       <div className="relative w-24 h-36 flex-shrink-0 overflow-hidden rounded-lg border border-ink-700 bg-ink-800">
+                        <div
+                          className="absolute top-1 left-1 z-10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleSelectFeedback(feedback.id)
+                          }}
+                        >
+                          <button className="p-0.5 rounded bg-black/40 hover:bg-black/60 transition-colors">
+                            {isSelected ? (
+                              <CheckSquare className="h-4 w-4 text-accent" />
+                            ) : (
+                              <Square className="h-4 w-4 text-paper-100/80" />
+                            )}
+                          </button>
+                        </div>
                         {page && (
                           <>
                             <img
@@ -429,10 +634,28 @@ export default function FeedbackBoard() {
             </div>
           ) : (
             <div className="flex flex-col gap-8">
-              {chapterPageGroups.map(({ chapter, pages: chapterPages }) => (
-                <div key={chapter.id}>
-                  <h2 className="text-lg font-bold font-display mb-4">{chapter.title}</h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {chapterPageGroups.map(({ chapter, pages: chapterPages }) => {
+                const isChapterExpanded = expandedChapterId === chapter.id || expandedChapterId === null
+                return (
+                  <div key={chapter.id}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <button
+                        onClick={() => toggleChapter(chapter.id)}
+                        className="p-1 rounded hover:bg-ink-800 transition-colors"
+                      >
+                        {isChapterExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-paper-200" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-paper-200" />
+                        )}
+                      </button>
+                      <h2 className="text-lg font-bold font-display">{chapter.title}</h2>
+                      <span className="text-xs text-ink-500">
+                        ({chapterPages.reduce((sum, cp) => sum + cp.feedbacks.length, 0)} 条反馈)
+                      </span>
+                    </div>
+                    {isChapterExpanded && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 ml-6">
                     {chapterPages.map(({ page, feedbacks: pageFeedbacks }) => {
                       const count = pageFeedbacks.length
                       const isExpanded = expandedPageId === page.id
@@ -498,43 +721,132 @@ export default function FeedbackBoard() {
 
                           {isExpanded && pageFeedbacks.length > 0 && (
                             <div className="mt-2 flex flex-col gap-2">
-                              {pageFeedbacks.map((feedback) => (
-                                <Card
-                                  key={feedback.id}
-                                  hover
-                                  className="cursor-pointer !p-2.5"
-                                  onClick={() => handleFeedbackClick(feedback)}
-                                >
-                                  <div className="flex items-start justify-between gap-2 mb-1">
-                                    <FeedbackBadge type={feedback.type} size="sm" />
+                              <div className="relative aspect-[3/4] max-w-md mx-auto border-2 border-ink-700 rounded-lg overflow-hidden">
+                                <img
+                                  src={page.imageUrl}
+                                  alt={`第 ${page.pageIndex + 1} 页`}
+                                  className="w-full h-full object-cover"
+                                />
+                                {pageFeedbacks.map((fb, idx) => {
+                                  const isHighlighted = highlightedFeedbackId === fb.id
+                                  const ringColor = FEEDBACK_RING_COLORS[fb.type]
+                                  const bgColor = FEEDBACK_BG_COLORS[fb.type]
+                                  return (
                                     <div
-                                      className="flex items-center gap-2"
-                                      onClick={(e) => e.stopPropagation()}
+                                      key={fb.id}
+                                      className={cn(
+                                        'absolute border-2 rounded-md transition-all duration-200 cursor-pointer',
+                                        isHighlighted && 'z-10 scale-[1.02]'
+                                      )}
+                                      style={{
+                                        left: `${fb.region.x * 100}%`,
+                                        top: `${fb.region.y * 100}%`,
+                                        width: `${fb.region.width * 100}%`,
+                                        height: `${fb.region.height * 100}%`,
+                                        borderColor: ringColor,
+                                        borderWidth: isHighlighted ? '3px' : '2px',
+                                        backgroundColor: bgColor,
+                                        boxShadow: isHighlighted ? `0 0 12px ${ringColor}` : undefined,
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setHighlightedFeedbackId(
+                                          highlightedFeedbackId === fb.id ? null : fb.id
+                                        )
+                                      }}
                                     >
-                                      <RoleBadge role={feedback.role} size="sm" />
-                                      <StatusBadge
-                                        status={feedback.status}
-                                        showDropdown
-                                        onClick={(newStatus) => handleStatusChange(feedback.id, newStatus)}
-                                      />
+                                      <span
+                                        className="absolute -top-2 -left-2 min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md"
+                                        style={{ backgroundColor: ringColor }}
+                                      >
+                                        {idx + 1}
+                                      </span>
                                     </div>
-                                  </div>
-                                  <p className="text-xs text-paper-100 line-clamp-2 leading-relaxed">
-                                    {feedback.content}
-                                  </p>
-                                  <p className="mt-1 text-xs text-ink-500">
-                                    — {feedback.reviewerName} · {formatDate(feedback.createdAt)}
-                                  </p>
-                                </Card>
-                              ))}
+                                  )
+                                })}
+                              </div>
+
+                              {pageFeedbacks.map((feedback, idx) => {
+                                const isHighlighted = highlightedFeedbackId === feedback.id
+                                const isSelected = selectedIds.has(feedback.id)
+                                const ringColor = FEEDBACK_RING_COLORS[feedback.type]
+                                return (
+                                  <Card
+                                    key={feedback.id}
+                                    hover
+                                    className={cn(
+                                      'cursor-pointer !p-2.5 transition-all duration-200',
+                                      isHighlighted && 'ring-2',
+                                      isSelected && 'ring-2 ring-accent'
+                                    )}
+                                    style={{
+                                      boxShadow: isHighlighted ? `0 0 0 2px ${ringColor}` : undefined,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setHighlightedFeedbackId(
+                                        highlightedFeedbackId === feedback.id ? null : feedback.id
+                                      )
+                                    }}
+                                    onDoubleClick={() => handleFeedbackClick(feedback)}
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          toggleSelectFeedback(feedback.id)
+                                        }}
+                                      >
+                                        <button className="p-0.5 rounded hover:bg-ink-800 transition-colors mt-0.5">
+                                          {isSelected ? (
+                                            <CheckSquare className="h-4 w-4 text-accent" />
+                                          ) : (
+                                            <Square className="h-4 w-4 text-paper-100/80" />
+                                          )}
+                                        </button>
+                                      </div>
+                                      <span
+                                        className="flex-shrink-0 mt-0.5 min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                                        style={{ backgroundColor: ringColor }}
+                                      >
+                                        {idx + 1}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2 mb-1">
+                                          <FeedbackBadge type={feedback.type} size="sm" />
+                                          <div
+                                            className="flex items-center gap-2"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <RoleBadge role={feedback.role} size="sm" />
+                                            <StatusBadge
+                                              status={feedback.status}
+                                              showDropdown
+                                              onClick={(newStatus) => handleStatusChange(feedback.id, newStatus)}
+                                            />
+                                          </div>
+                                        </div>
+                                        <p className="text-xs text-paper-100 line-clamp-2 leading-relaxed">
+                                          {feedback.content}
+                                        </p>
+                                        <p className="mt-1 text-xs text-ink-500">
+                                          — {feedback.reviewerName} · {formatDate(feedback.createdAt)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </Card>
+                                )
+                              })}
                             </div>
                           )}
                         </div>
                       )
                     })}
                   </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
