@@ -1,0 +1,29 @@
+[
+  {
+    "id": "link-1",
+    "workId": "work-1",
+    "chapterId": "chapter-1",
+    "token": "token-editor-123",
+    "role": "editor",
+    "expiresAt": "2026-07-19T22:09:11.827Z",
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "link-2",
+    "workId": "work-1",
+    "chapterId": "chapter-1",
+    "token": "token-assistant-456",
+    "role": "assistant",
+    "expiresAt": "2026-07-19T22:09:11.827Z",
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "link-3",
+    "workId": "work-1",
+    "chapterId": "chapter-1",
+    "token": "token-fan-789",
+    "role": "fan",
+    "expiresAt": "2026-07-19T22:09:11.827Z",
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  }
+]

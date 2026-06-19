@@ -1,0 +1,42 @@
+[
+  {
+    "id": "page-1",
+    "chapterId": "chapter-1",
+    "imageUrl": "https://picsum.photos/seed/comic1/800/1200",
+    "version": 1,
+    "pageIndex": 0,
+    "width": 800,
+    "height": 1200,
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "page-2",
+    "chapterId": "chapter-1",
+    "imageUrl": "https://picsum.photos/seed/comic2/800/1200",
+    "version": 1,
+    "pageIndex": 1,
+    "width": 800,
+    "height": 1200,
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "page-3",
+    "chapterId": "chapter-1",
+    "imageUrl": "https://picsum.photos/seed/comic3/800/1200",
+    "version": 1,
+    "pageIndex": 2,
+    "width": 800,
+    "height": 1200,
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  },
+  {
+    "id": "page-4",
+    "chapterId": "chapter-1",
+    "imageUrl": "https://picsum.photos/seed/comic4/800/1200",
+    "version": 1,
+    "pageIndex": 3,
+    "width": 800,
+    "height": 1200,
+    "createdAt": "2026-06-19T22:09:11.824Z"
+  }
+]
