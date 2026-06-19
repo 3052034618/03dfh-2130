@@ -251,16 +251,13 @@ export default function WorkDetail() {
     setChapterTitle('')
   }
 
-  const handleGenerateLink = async (role: ReaderRole) => {
-    if (!workId || chapters.length === 0) return
-    await createLink(workId, {
-      role,
-      chapterId: chapters[0].id,
-    })
+  const handleGenerateLink = async (role: ReaderRole, chapterId: string) => {
+    if (!workId) return
+    await createLink(workId, { role, chapterId })
   }
 
-  const getLinkForRole = (role: ReaderRole) => {
-    return links.find((l) => l.role === role)
+  const getLinkForRole = (role: ReaderRole, chapterId: string) => {
+    return links.find((l) => l.role === role && l.chapterId === chapterId)
   }
 
   const buildShareUrl = (token: string) => {
@@ -441,20 +438,53 @@ export default function WorkDetail() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {(['editor', 'assistant', 'fan'] as ReaderRole[]).map((role) => {
-                const link = getLinkForRole(role)
-                return (
-                  <LinkCard
-                    key={role}
-                    role={role}
-                    linkUrl={link ? buildShareUrl(link.token) : undefined}
-                    expiresAt={link?.expiresAt}
-                    onGenerate={() => handleGenerateLink(role)}
-                  />
-                )
-              })}
-            </div>
+            {chaptersWithPageCount.length === 0 ? (
+              <Empty
+                title="请先上传章节"
+                description="上传章节后即可为各章节生成分享链接"
+              />
+            ) : (
+              <div className="space-y-6">
+                {chaptersWithPageCount.map((chapter) => (
+                  <div key={chapter.id} className="bg-ink-900/50 rounded-xl p-5 border border-ink-800">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-14 rounded overflow-hidden border border-ink-700 flex-shrink-0 bg-ink-800">
+                        {chapter.firstPageImageUrl ? (
+                          <img
+                            src={chapter.firstPageImageUrl}
+                            alt={chapter.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileImage className="h-4 w-4 text-ink-500" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-paper-100">{chapter.title}</h3>
+                        <span className="text-xs text-ink-500">{chapter.pageCount} 页</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(['editor', 'assistant', 'fan'] as ReaderRole[]).map((role) => {
+                        const link = getLinkForRole(role, chapter.id)
+                        return (
+                          <LinkCard
+                            key={role}
+                            role={role}
+                            linkUrl={link ? buildShareUrl(link.token) : undefined}
+                            expiresAt={link?.expiresAt}
+                            onGenerate={() => handleGenerateLink(role, chapter.id)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

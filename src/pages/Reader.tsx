@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Plus } from 'lucide-react'
-import type { FeedbackType, Feedback, Region } from '@shared/types'
+import type { FeedbackType, Region } from '@shared/types'
 import { FEEDBACK_TYPE_META } from '@/utils/constants'
 import { cn } from '@/utils/helpers'
 import { useReaderStore } from '@/store/reader'
@@ -85,6 +85,7 @@ export default function Reader() {
   const [feedbackContent, setFeedbackContent] = useState('')
   const [hoveredFeedbackId, setHoveredFeedbackId] = useState<string | null>(null)
   const [workTitle, setWorkTitle] = useState('')
+  const [currentPageIndex, setCurrentPageIndex] = useState(0)
 
   const pageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const selectingRef = useRef<SelectingState | null>(null)
@@ -114,6 +115,25 @@ export default function Reader() {
       setWorkTitle('星轨前夜')
     }
   }, [chapter])
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const pageId = entry.target.getAttribute('data-page-id')
+            if (pageId) {
+              const idx = pages.findIndex(p => p.id === pageId)
+              if (idx >= 0) setCurrentPageIndex(idx)
+            }
+          }
+        })
+      },
+      { threshold: 0.3 }
+    )
+    pageRefs.current.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  }, [pages])
 
   const getFeedbackColor = (type: FeedbackType) => FEEDBACK_COLOR_MAP[type]
 
@@ -243,7 +263,7 @@ export default function Reader() {
   }
 
   return (
-    <div className="min-h-screen bg-ink-950 text-paper-100">
+    <div className="min-h-screen bg-ink-950 text-paper-100" onClick={() => setExpandedFeedbackId(null)}>
       <header className="fixed top-0 w-full h-16 bg-ink-950/90 backdrop-blur border-b border-ink-800 z-30 flex items-center px-4">
         <button
           onClick={() => navigate(-1)}
@@ -276,6 +296,7 @@ export default function Reader() {
               ref={(el) => {
                 if (el) pageRefs.current.set(page.id, el)
               }}
+              data-page-id={page.id}
               className={cn(
                 'w-full mb-8 relative rounded-xl overflow-hidden shadow-2xl paper-texture select-none',
                 showCursor && 'cursor-crosshair'
@@ -295,9 +316,27 @@ export default function Reader() {
                 const centerY = feedback.region.y + feedback.region.height / 2
                 const isHovered = hoveredFeedbackId === feedback.id
                 const isExpanded = expandedFeedbackId === feedback.id
+                const panelOnLeft = feedback.region.x > 0.5
 
                 return (
                   <div key={feedback.id}>
+                    {isExpanded && (
+                      <div
+                        className={cn(
+                          'absolute border-[3px] rounded-md pointer-events-none z-10',
+                          'animate-pulse',
+                          color.ring,
+                          color.bg
+                        )}
+                        style={{
+                          left: `${feedback.region.x * 100}%`,
+                          top: `${feedback.region.y * 100}%`,
+                          width: `${feedback.region.width * 100}%`,
+                          height: `${feedback.region.height * 100}%`,
+                        }}
+                      />
+                    )}
+
                     <div
                       className={cn(
                         'absolute z-10 cursor-pointer transform -translate-x-1/2 -translate-y-1/2',
@@ -309,7 +348,17 @@ export default function Reader() {
                       onMouseLeave={() => setHoveredFeedbackId(null)}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setExpandedFeedbackId(isExpanded ? null : feedback.id)
+                        if (isExpanded) {
+                          setExpandedFeedbackId(null)
+                        } else {
+                          setExpandedFeedbackId(feedback.id)
+                          const pageEl = pageRefs.current.get(feedback.pageId)
+                          if (pageEl) {
+                            const rect = pageEl.getBoundingClientRect()
+                            const scrollTarget = window.scrollY + rect.top + feedback.region.y * rect.height - window.innerHeight / 3
+                            window.scrollTo({ top: scrollTarget, behavior: 'smooth' })
+                          }
+                        }
                       }}
                     >
                       <div className="relative">
@@ -352,6 +401,44 @@ export default function Reader() {
                         <p className="mt-1 text-xs text-ink-500">— {feedback.reviewerName}</p>
                       </div>
                     )}
+
+                    {isExpanded && (
+                      <div
+                        className={cn(
+                          'absolute z-20 w-[280px] p-4 rounded-lg shadow-xl',
+                          'bg-ink-900 border border-ink-700 animate-fade-up'
+                        )}
+                        style={{
+                          ...(panelOnLeft
+                            ? { right: `${(1 - feedback.region.x) * 100}%` }
+                            : { left: `${(feedback.region.x + feedback.region.width) * 100}%` }),
+                          top: `${feedback.region.y * 100}%`,
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <FeedbackBadge type={feedback.type} size="sm" />
+                            <RoleBadge role={feedback.role} size="sm" />
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedFeedbackId(null)
+                            }}
+                            className="text-ink-500 hover:text-paper-100 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="bg-ink-800 rounded-lg p-3 mb-3">
+                          <p className="text-sm text-paper-100 leading-relaxed whitespace-pre-wrap">{feedback.content}</p>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-ink-500">— {feedback.reviewerName}</span>
+                          <span className="text-ink-600">{new Date(feedback.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -389,6 +476,35 @@ export default function Reader() {
           )
         })}
       </main>
+
+      <nav className="fixed right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2">
+        {pages.map((page, index) => {
+          const count = getPageFeedbacks(page.id).length
+          const isCurrent = index === currentPageIndex
+          return (
+            <button
+              key={page.id}
+              onClick={() => {
+                pageRefs.current.get(page.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              className="group relative flex items-center"
+            >
+              <span className={cn(
+                'w-3 h-3 rounded-full transition-all',
+                isCurrent ? 'bg-accent scale-125' : 'bg-ink-600 hover:bg-ink-500'
+              )} />
+              {count > 0 && (
+                <span className="absolute -left-1 -top-1 w-4 h-4 rounded-full bg-accent text-white text-[10px] flex items-center justify-center">
+                  {count}
+                </span>
+              )}
+              <span className="absolute right-6 opacity-0 group-hover:opacity-100 transition-opacity bg-ink-800 px-2 py-1 rounded text-xs whitespace-nowrap">
+                P{index + 1}
+              </span>
+            </button>
+          )
+        })}
+      </nav>
 
       <footer className="fixed bottom-0 w-full h-16 bg-ink-950/90 backdrop-blur border-t border-ink-800 z-30 flex justify-center items-center gap-2 px-4">
         {FEEDBACK_TYPES.map((type) => {
@@ -473,32 +589,6 @@ export default function Reader() {
             </Button>
           </div>
         </div>
-      </Modal>
-
-      <Modal
-        open={!!expandedFeedbackId}
-        onClose={() => setExpandedFeedbackId(null)}
-        title="反馈详情"
-      >
-        {(() => {
-          const feedback = feedbacks.find((f) => f.id === expandedFeedbackId) as Feedback | undefined
-          if (!feedback) return null
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <FeedbackBadge type={feedback.type} />
-                <RoleBadge role={feedback.role} size="sm" />
-              </div>
-              <div className="bg-ink-800 rounded-lg p-4">
-                <p className="text-paper-100 leading-relaxed whitespace-pre-wrap">{feedback.content}</p>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-ink-500">评论者</span>
-                <span className="text-paper-200 font-medium">{feedback.reviewerName}</span>
-              </div>
-            </div>
-          )
-        })()}
       </Modal>
     </div>
   )

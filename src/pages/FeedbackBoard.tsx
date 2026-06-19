@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, SlidersHorizontal, Eye, GitCompare } from 'lucide-react'
+import { ChevronLeft, SlidersHorizontal, Eye, GitCompare, Download, LayoutGrid, List, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Feedback, FeedbackType, FeedbackStatus, ReaderRole } from '@shared/types'
 import { FEEDBACK_TYPE_META, ROLE_META, STATUS_META } from '@/utils/constants'
 import { cn, formatDate } from '@/utils/helpers'
@@ -20,6 +20,7 @@ export default function FeedbackBoard() {
   const navigate = useNavigate()
   const {
     currentWork,
+    chapters,
     pages,
     feedbacks: allFeedbacks,
     fetchWorkDetail,
@@ -39,6 +40,8 @@ export default function FeedbackBoard() {
   const [selectedRole, setSelectedRole] = useState<ReaderRole | 'all'>('all')
   const [selectedTypes, setSelectedTypes] = useState<Set<FeedbackType>>(new Set(FEEDBACK_TYPES))
   const [selectedStatuses, setSelectedStatuses] = useState<Set<FeedbackStatus>>(new Set(STATUSES))
+  const [viewMode, setViewMode] = useState<'list' | 'aggregate'>('list')
+  const [expandedPageId, setExpandedPageId] = useState<string | null>(null)
 
   const filteredFeedbacks = useMemo(() => {
     return allFeedbacks.filter((fb) => {
@@ -103,6 +106,60 @@ export default function FeedbackBoard() {
   const handleStatusChange = async (feedbackId: string, newStatus?: FeedbackStatus) => {
     if (!newStatus) return
     await updateFeedbackStatus(feedbackId, newStatus)
+  }
+
+  const chapterPageGroups = useMemo(() => {
+    const pageFeedbackMap = new Map<string, Feedback[]>()
+    filteredFeedbacks.forEach((fb) => {
+      const list = pageFeedbackMap.get(fb.pageId) || []
+      list.push(fb)
+      pageFeedbackMap.set(fb.pageId, list)
+    })
+
+    return chapters.map((chapter) => {
+      const chapterPages = pages
+        .filter((p) => p.chapterId === chapter.id)
+        .sort((a, b) => a.pageIndex - b.pageIndex)
+        .map((page) => ({
+          page,
+          feedbacks: pageFeedbackMap.get(page.id) || [],
+        }))
+      return { chapter, pages: chapterPages }
+    })
+  }, [chapters, pages, filteredFeedbacks])
+
+  const exportCSV = () => {
+    const BOM = '\uFEFF'
+    const header = '序号,反馈类型,反馈内容,评论者,角色,状态,页码,区域(x,y,w,h),提交时间'
+    const rows = filteredFeedbacks.map((fb, i) => {
+      const page = pages.find(p => p.id === fb.pageId)
+      return [
+        i + 1,
+        FEEDBACK_TYPE_META[fb.type].label,
+        `"${fb.content.replace(/"/g, '""')}"`,
+        fb.reviewerName,
+        ROLE_META[fb.role].label,
+        STATUS_META[fb.status].label,
+        page ? `P${page.pageIndex + 1}` : '',
+        `(${fb.region.x},${fb.region.y},${fb.region.width},${fb.region.height})`,
+        formatDate(fb.createdAt),
+      ].join(',')
+    })
+    const csv = BOM + header + '\n' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `反馈导出_${work?.title || '未知'}_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const getCountColor = (count: number) => {
+    if (count === 0) return 'bg-gray-500'
+    if (count <= 2) return 'bg-green-500'
+    if (count <= 4) return 'bg-yellow-500'
+    return 'bg-red-500'
   }
 
   return (
@@ -257,6 +314,32 @@ export default function FeedbackBoard() {
             <p className="text-sm text-paper-200">反馈看板 · 共 {filteredFeedbacks.length} 条反馈</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-ink-700 overflow-hidden">
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-1.5 text-sm transition-colors',
+                  viewMode === 'list' ? 'bg-accent text-white' : 'text-paper-200 hover:bg-ink-800'
+                )}
+              >
+                <List className="h-3.5 w-3.5" />
+                列表
+              </button>
+              <button
+                onClick={() => setViewMode('aggregate')}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-1.5 text-sm transition-colors',
+                  viewMode === 'aggregate' ? 'bg-accent text-white' : 'text-paper-200 hover:bg-ink-800'
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                聚合
+              </button>
+            </div>
+            <Button variant="secondary" size="sm" onClick={exportCSV}>
+              <Download className="h-4 w-4 mr-1.5" />
+              导出 CSV
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => navigate(-1)}>
               <Eye className="h-4 w-4 mr-1.5" />
               浏览阅读
@@ -278,7 +361,7 @@ export default function FeedbackBoard() {
               <div className="text-5xl mb-4">📭</div>
               <p className="text-paper-200">暂无符合条件的反馈</p>
             </div>
-          ) : (
+          ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
               {filteredFeedbacks.map((feedback) => {
                 const page = getPageForFeedback(feedback)
@@ -343,6 +426,115 @@ export default function FeedbackBoard() {
                   </Card>
                 )
               })}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8">
+              {chapterPageGroups.map(({ chapter, pages: chapterPages }) => (
+                <div key={chapter.id}>
+                  <h2 className="text-lg font-bold font-display mb-4">{chapter.title}</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                    {chapterPages.map(({ page, feedbacks: pageFeedbacks }) => {
+                      const count = pageFeedbacks.length
+                      const isExpanded = expandedPageId === page.id
+                      const typeDist: Record<FeedbackType, number> = {
+                        confusing: 0, slow: 0, funny: 0, cute: 0, detail: 0,
+                      }
+                      pageFeedbacks.forEach((fb) => { typeDist[fb.type]++ })
+
+                      return (
+                        <div key={page.id}>
+                          <button
+                            onClick={() => setExpandedPageId(isExpanded ? null : page.id)}
+                            className="w-full text-left"
+                          >
+                            <div className="relative aspect-[3/4] overflow-hidden rounded-lg border border-ink-700 bg-ink-800">
+                              <img
+                                src={page.imageUrl}
+                                alt={`第 ${page.pageIndex + 1} 页`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs">
+                                P{page.pageIndex + 1}
+                              </div>
+                              <div
+                                className={cn(
+                                  'absolute top-1 right-1 rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 text-xs font-bold text-white',
+                                  getCountColor(count)
+                                )}
+                              >
+                                {count}
+                              </div>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-xs text-paper-200">P{page.pageIndex + 1}</span>
+                              {isExpanded ? (
+                                <ChevronUp className="h-3.5 w-3.5 text-paper-200" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 text-paper-200" />
+                              )}
+                            </div>
+                          </button>
+
+                          <div className="h-1.5 mt-1.5 rounded-full bg-ink-800 overflow-hidden flex">
+                            {count > 0 && FEEDBACK_TYPES.map((type) => {
+                              const typeCount = typeDist[type]
+                              if (typeCount === 0) return null
+                              const colorClass = {
+                                confusing: 'bg-feedback-confusing',
+                                slow: 'bg-feedback-slow',
+                                funny: 'bg-feedback-funny',
+                                cute: 'bg-feedback-cute',
+                                detail: 'bg-feedback-detail',
+                              }[type]
+                              return (
+                                <div
+                                  key={type}
+                                  className={cn('h-full', colorClass)}
+                                  style={{ width: `${(typeCount / count) * 100}%` }}
+                                />
+                              )
+                            })}
+                          </div>
+
+                          {isExpanded && pageFeedbacks.length > 0 && (
+                            <div className="mt-2 flex flex-col gap-2">
+                              {pageFeedbacks.map((feedback) => (
+                                <Card
+                                  key={feedback.id}
+                                  hover
+                                  className="cursor-pointer !p-2.5"
+                                  onClick={() => handleFeedbackClick(feedback)}
+                                >
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <FeedbackBadge type={feedback.type} size="sm" />
+                                    <div
+                                      className="flex items-center gap-2"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <RoleBadge role={feedback.role} size="sm" />
+                                      <StatusBadge
+                                        status={feedback.status}
+                                        showDropdown
+                                        onClick={(newStatus) => handleStatusChange(feedback.id, newStatus)}
+                                      />
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-paper-100 line-clamp-2 leading-relaxed">
+                                    {feedback.content}
+                                  </p>
+                                  <p className="mt-1 text-xs text-ink-500">
+                                    — {feedback.reviewerName} · {formatDate(feedback.createdAt)}
+                                  </p>
+                                </Card>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
